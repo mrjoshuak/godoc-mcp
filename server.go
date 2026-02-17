@@ -18,6 +18,7 @@ import (
 
 const (
 	cacheTTL     = 5 * time.Minute
+	projectTTL   = 30 * time.Minute
 	maxCacheSize = 500
 	cmdTimeout   = 30 * time.Second
 )
@@ -54,15 +55,22 @@ type cachedDoc struct {
 	timestamp time.Time
 }
 
+type cachedProject struct {
+	dir       string
+	timestamp time.Time
+}
+
 type godocServer struct {
 	mcpServer *server.MCPServer
 	mu        sync.Mutex
 	cache     map[string]cachedDoc
+	projects  map[string]cachedProject
 }
 
 func newGodocServer() *godocServer {
 	gs := &godocServer{
-		cache: make(map[string]cachedDoc),
+		cache:    make(map[string]cachedDoc),
+		projects: make(map[string]cachedProject),
 	}
 
 	s := server.NewMCPServer(
@@ -76,6 +84,7 @@ func newGodocServer() *godocServer {
 
 	tool := mcp.NewTool("get_doc",
 		mcp.WithDescription(toolDescription),
+		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithString("path",
 			mcp.Required(),
 			mcp.Description("Path to the Go package or file. Import path (e.g., 'io', 'github.com/user/repo') or local file path."),
@@ -149,14 +158,13 @@ func (gs *godocServer) handleGetDoc(ctx context.Context, request mcp.CallToolReq
 	}
 	pkgPath = resolvedPath
 
-	// Create a temporary project if no working directory was provided.
+	// Get or create a cached project directory if no working directory was provided.
 	if workingDir == "" {
-		tempDir, err := createTempProject(ctx, pkgPath)
+		projDir, err := gs.getOrCreateProject(ctx, pkgPath)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to create temporary project: %v", err)), nil
 		}
-		defer os.RemoveAll(tempDir)
-		workingDir = tempDir
+		workingDir = projDir
 	}
 
 	// Build go doc arguments.
@@ -269,8 +277,58 @@ func readModuleName(goModPath string) (string, error) {
 	return "", fmt.Errorf("no module declaration found in %s", goModPath)
 }
 
+// getOrCreateProject returns a cached project directory for the import path,
+// creating one if needed. Directories are reused for 30 minutes to avoid
+// repeated go get calls for the same package.
+func (gs *godocServer) getOrCreateProject(ctx context.Context, importPath string) (string, error) {
+	gs.mu.Lock()
+	if proj, ok := gs.projects[importPath]; ok {
+		if time.Since(proj.timestamp) < projectTTL {
+			gs.mu.Unlock()
+			log.Printf("Project cache hit for %s", importPath)
+			return proj.dir, nil
+		}
+		// Expired — clean up and recreate.
+		os.RemoveAll(proj.dir)
+		delete(gs.projects, importPath)
+	}
+	gs.mu.Unlock()
+
+	dir, err := createTempProject(ctx, importPath)
+	if err != nil {
+		return "", err
+	}
+
+	gs.mu.Lock()
+	// Double-check: another goroutine may have populated the cache while we
+	// were creating our temp project.
+	if proj, ok := gs.projects[importPath]; ok {
+		if time.Since(proj.timestamp) < projectTTL {
+			gs.mu.Unlock()
+			os.RemoveAll(dir) // Discard ours; use the one already cached.
+			log.Printf("Project cache hit for %s (race resolved)", importPath)
+			return proj.dir, nil
+		}
+		os.RemoveAll(proj.dir)
+	}
+	gs.projects[importPath] = cachedProject{dir: dir, timestamp: time.Now()}
+	gs.mu.Unlock()
+
+	log.Printf("Project cache miss for %s -> %s", importPath, dir)
+	return dir, nil
+}
+
+// cleanup removes all cached project directories.
+func (gs *godocServer) cleanup() {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	for key, proj := range gs.projects {
+		os.RemoveAll(proj.dir)
+		delete(gs.projects, key)
+	}
+}
+
 // createTempProject creates a temporary Go module for fetching documentation.
-// The caller must clean up the returned directory with os.RemoveAll.
 func createTempProject(ctx context.Context, importPath string) (string, error) {
 	tempDir, err := os.MkdirTemp("", "godoc-mcp-*")
 	if err != nil {

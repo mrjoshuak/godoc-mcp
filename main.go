@@ -13,7 +13,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-const version = "1.0.0"
+const version = "1.0.1"
 
 func main() {
 	transport := flag.String("transport", "stdio", "Transport type: stdio, sse, or http")
@@ -24,6 +24,7 @@ func main() {
 	log.Printf("Starting godoc-mcp server v%s (%s transport)...", version, *transport)
 
 	gs := newGodocServer()
+	defer gs.cleanup()
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -32,6 +33,7 @@ func main() {
 	case "stdio":
 		go func() {
 			<-sigCh
+			gs.cleanup()
 			os.Exit(0)
 		}()
 		if err := server.ServeStdio(gs.mcpServer); err != nil {
@@ -51,6 +53,7 @@ func main() {
 		go func() {
 			<-sigCh
 			log.Printf("Shutting down...")
+			gs.cleanup()
 			sseServer.Shutdown(context.Background())
 		}()
 		log.Printf("SSE server listening on %s", *addr)
@@ -63,6 +66,7 @@ func main() {
 		go func() {
 			<-sigCh
 			log.Printf("Shutting down...")
+			gs.cleanup()
 			httpServer.Shutdown(context.Background())
 		}()
 		log.Printf("HTTP server listening on %s", *addr)

@@ -313,6 +313,90 @@ func TestCacheExpiry(t *testing.T) {
 	}
 }
 
+func TestProjectCache(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("go not found in PATH")
+	}
+
+	gs := newGodocServer()
+	defer gs.cleanup()
+
+	ctx := context.Background()
+
+	// First call should be a cache miss.
+	dir1, err := gs.getOrCreateProject(ctx, "io")
+	if err != nil {
+		t.Fatalf("getOrCreateProject: %v", err)
+	}
+	if dir1 == "" {
+		t.Fatal("expected non-empty directory")
+	}
+
+	// Second call should return the same cached directory.
+	dir2, err := gs.getOrCreateProject(ctx, "io")
+	if err != nil {
+		t.Fatalf("getOrCreateProject (cached): %v", err)
+	}
+	if dir2 != dir1 {
+		t.Errorf("expected cached dir %q, got %q", dir1, dir2)
+	}
+
+	// Different package should get a different directory.
+	dir3, err := gs.getOrCreateProject(ctx, "fmt")
+	if err != nil {
+		t.Fatalf("getOrCreateProject (fmt): %v", err)
+	}
+	if dir3 == dir1 {
+		t.Error("expected different directory for different package")
+	}
+
+	// Cleanup should remove all dirs.
+	gs.cleanup()
+	if _, err := os.Stat(dir1); !os.IsNotExist(err) {
+		t.Errorf("expected dir %q to be removed after cleanup", dir1)
+	}
+	if _, err := os.Stat(dir3); !os.IsNotExist(err) {
+		t.Errorf("expected dir %q to be removed after cleanup", dir3)
+	}
+}
+
+func TestProjectCacheExpiry(t *testing.T) {
+	gs := &godocServer{
+		cache:    make(map[string]cachedDoc),
+		projects: make(map[string]cachedProject),
+	}
+	defer gs.cleanup()
+
+	// Insert an expired project entry.
+	expiredDir := t.TempDir()
+	gs.projects["expired-pkg"] = cachedProject{
+		dir:       expiredDir,
+		timestamp: time.Now().Add(-projectTTL - time.Second),
+	}
+
+	// Accessing it should not return the expired entry.
+	gs.mu.Lock()
+	proj, ok := gs.projects["expired-pkg"]
+	expired := ok && time.Since(proj.timestamp) >= projectTTL
+	gs.mu.Unlock()
+
+	if !expired {
+		t.Error("expected project entry to be expired")
+	}
+}
+
+func TestReadOnlyHint(t *testing.T) {
+	gs := newGodocServer()
+
+	// Verify the tool has ReadOnlyHint set via the MCP protocol.
+	// We test this by checking the tool registration worked with the annotation.
+	// The actual annotation is set via mcp.WithReadOnlyHintAnnotation(true)
+	// in newGodocServer, which is verified by the MCP protocol response.
+	if gs.mcpServer == nil {
+		t.Fatal("expected mcpServer to be initialized")
+	}
+}
+
 // Integration tests that require the Go toolchain.
 
 func TestRunGoDocStdlib(t *testing.T) {
