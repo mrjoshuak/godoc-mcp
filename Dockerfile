@@ -12,4 +12,6 @@ RUN apk add --no-cache git ca-certificates
 
 COPY --from=builder /build/godoc-mcp /usr/local/bin/godoc-mcp
 
+EXPOSE 8080
+
 ENTRYPOINT ["godoc-mcp"]

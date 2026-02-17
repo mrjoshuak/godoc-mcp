@@ -100,6 +100,25 @@ In addition to providing documentation while working on coding tasks. `godoc-mcp
 
 ## Usage
 
+### Transport Options
+
+godoc-mcp supports three transport modes:
+
+- **stdio** (default): Standard input/output, for local MCP clients like Claude Desktop
+- **sse**: Server-Sent Events over HTTP, for web-based MCP clients
+- **http**: Streamable HTTP, the MCP specification's recommended HTTP transport
+
+```bash
+# Default stdio mode
+godoc-mcp
+
+# SSE mode on port 8080
+godoc-mcp --transport sse --addr :8080
+
+# Streamable HTTP mode
+godoc-mcp --transport http --addr :9090
+```
+
 ### Docker
 
 ```bash
@@ -132,14 +151,19 @@ To access local project documentation, mount your project directory:
 }
 ```
 
+To run in HTTP mode via Docker:
+
+```bash
+docker run --rm -p 8080:8080 ghcr.io/mrjoshuak/godoc-mcp:latest --transport sse --addr :8080
+```
+
 ### Claude Desktop
 
 To add to the Claude desktop app:
 
-```yaml
+```json
 {
   "mcpServers": {
-    # other MCP servers ...
     "godoc": {
       "command": "/path/to/godoc-mcp",
       "args": [],
@@ -152,17 +176,16 @@ To add to the Claude desktop app:
 }
 ```
 
+### Tool Parameters
+
 When connected to an MCP-capable LLM (like Claude), godoc-mcp provides the `get_doc` tool with the following parameters:
 
-- `path`: Path to the Go package or file (import path or file path)
+- `path` (required): Path to the Go package or file (import path or file path)
 - `target` (optional): Specific symbol to document (function, type, etc.)
-- `cmd_flags` (optional): Additional go doc command flags
+- `cmd_flags` (optional): Additional go doc command flags (allowed: `-all`, `-src`, `-u`, `-short`, `-c`)
 - `working_dir` (optional): Working directory for module-aware documentation (if not provided, a temporary project will be created automatically)
-
-Advanced `cmd_flags` values that an LLM can leverage:
-- `-all`: Show all documentation for package, excluding unexported symbols
-- `-u`: Show unexported symbols
-- `-src`: Show the source code instead of documentation
+- `page` (optional): Page number for paginated results (default: 1)
+- `page_size` (optional): Lines per page, 100-5000 (default: 1000)
 
 ## Troubleshooting
 
