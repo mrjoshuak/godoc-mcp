@@ -1,7 +1,7 @@
 # godoc-mcp
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/mrjoshuak/godoc-mcp)](https://goreportcard.com/report/github.com/mrjoshuak/godoc-mcp)
-[![GoDoc](https://godoc.org/github.com/mrjoshuak/godoc-mcp?status.svg)](https://godoc.org/github.com/mrjoshuak/godoc-mcp)
+[![Go Reference](https://pkg.go.dev/badge/github.com/mrjoshuak/godoc-mcp.svg)](https://pkg.go.dev/github.com/mrjoshuak/godoc-mcp)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## Overview
@@ -138,7 +138,7 @@ For use with [Docker MCP Gateway](https://docs.docker.com/ai/mcp-catalog-and-too
 }
 ```
 
-To access local project documentation, mount your project directory:
+To access local project documentation, mount your project directory and use `/workspace` as the `working_dir` parameter:
 
 ```json
 {
@@ -151,22 +151,39 @@ To access local project documentation, mount your project directory:
 }
 ```
 
-To run in HTTP mode via Docker:
+To run with SSE transport via Docker:
 
 ```bash
 docker run --rm -p 8080:8080 ghcr.io/mrjoshuak/godoc-mcp:latest --transport sse --addr :8080
 ```
 
+### Claude Code
+
+```bash
+claude mcp add godoc-mcp -- godoc-mcp
+```
+
 ### Claude Desktop
 
-To add to the Claude desktop app:
+To add to the Claude desktop app, edit your MCP config:
 
 ```json
 {
   "mcpServers": {
     "godoc": {
-      "command": "/path/to/godoc-mcp",
-      "args": [],
+      "command": "godoc-mcp"
+    }
+  }
+}
+```
+
+If `go doc` can't find your Go installation, add environment variables:
+
+```json
+{
+  "mcpServers": {
+    "godoc": {
+      "command": "godoc-mcp",
       "env": {
         "GOPATH": "/path/to/go",
         "GOMODCACHE": "/path/to/go/pkg/mod"
