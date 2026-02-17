@@ -1,0 +1,7 @@
+.git
+.github
+.gitignore
+LICENSE
+Readme.md
+*.md
+godoc-mcp

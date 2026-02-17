@@ -100,6 +100,40 @@ In addition to providing documentation while working on coding tasks. `godoc-mcp
 
 ## Usage
 
+### Docker
+
+```bash
+docker pull ghcr.io/mrjoshuak/godoc-mcp:latest
+```
+
+For use with [Docker MCP Gateway](https://docs.docker.com/ai/mcp-catalog-and-toolkit/mcp-gateway/), add to your MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "godoc": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "ghcr.io/mrjoshuak/godoc-mcp:latest"]
+    }
+  }
+}
+```
+
+To access local project documentation, mount your project directory:
+
+```json
+{
+  "mcpServers": {
+    "godoc": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-v", "/path/to/project:/workspace", "ghcr.io/mrjoshuak/godoc-mcp:latest"]
+    }
+  }
+}
+```
+
+### Claude Desktop
+
 To add to the Claude desktop app:
 
 ```yaml
