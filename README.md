@@ -193,16 +193,27 @@ If `go doc` can't find your Go installation, add environment variables:
 }
 ```
 
-### Tool Parameters
+### Tools
 
-When connected to an MCP-capable LLM (like Claude), godoc-mcp provides the `get_doc` tool with the following parameters:
+godoc-mcp provides two tools:
 
-- `path` (required): Path to the Go package or file (import path or file path)
+#### `get_doc`
+
+Get documentation for a Go package, type, function, or method.
+
+- `path` (required): Package import path (e.g., `io`, `github.com/user/repo`) or local file path
 - `target` (optional): Specific symbol to document (function, type, etc.)
-- `cmd_flags` (optional): Additional go doc command flags (allowed: `-all`, `-src`, `-u`, `-short`, `-c`)
-- `working_dir` (optional): Working directory for module-aware documentation (if not provided, a temporary project will be created automatically)
+- `cmd_flags` (optional): Additional go doc flags (allowed: `-all`, `-src`, `-u`, `-short`, `-c`)
+- `working_dir` (optional): Working directory for module context (required for relative paths)
 - `page` (optional): Page number for paginated results (default: 1)
 - `page_size` (optional): Lines per page, 100-5000 (default: 1000)
+
+#### `list_packages`
+
+List all sub-packages under a Go package path. Use this to discover the correct import paths for sub-packages instead of guessing.
+
+- `path` (required): Root package import path (e.g., `net`, `github.com/user/repo`)
+- `working_dir` (optional): Working directory for module context (required for relative paths)
 
 ## Troubleshooting
 
