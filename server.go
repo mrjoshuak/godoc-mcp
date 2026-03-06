@@ -50,6 +50,13 @@ Common Usage Patterns:
 
 The documentation is cached for 5 minutes to improve performance.`
 
+const listPackagesDescription = `List all sub-packages under a Go package path.
+Use this to discover the correct import paths for sub-packages when you see types
+referenced from other packages (e.g., seeing "casext.Engine" and needing to find
+which sub-package provides it). Returns each sub-package's import path and synopsis.
+
+Use get_doc to read documentation for a specific package after finding it with this tool.`
+
 type cachedDoc struct {
 	content   string
 	timestamp time.Time
@@ -112,6 +119,19 @@ func newGodocServer() *godocServer {
 		),
 	)
 	s.AddTool(tool, gs.handleGetDoc)
+
+	listTool := mcp.NewTool("list_packages",
+		mcp.WithDescription(listPackagesDescription),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithString("path",
+			mcp.Required(),
+			mcp.Description("Root package import path (e.g., 'net', 'github.com/user/repo') or local path. All sub-packages will be listed."),
+		),
+		mcp.WithString("working_dir",
+			mcp.Description("Working directory for module context. Required for relative paths."),
+		),
+	)
+	s.AddTool(listTool, gs.handleListPackages)
 
 	return gs
 }
@@ -187,6 +207,80 @@ func (gs *godocServer) handleGetDoc(ctx context.Context, request mcp.CallToolReq
 	}
 
 	return mcp.NewToolResultText(result), nil
+}
+
+func (gs *godocServer) handleListPackages(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	pkgPath, err := request.RequireString("path")
+	if err != nil {
+		return mcp.NewToolResultError("path argument is required"), nil
+	}
+
+	workingDir := request.GetString("working_dir", "")
+
+	if workingDir != "" {
+		info, err := os.Stat(workingDir)
+		if err != nil || !info.IsDir() {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid working directory: %s", workingDir)), nil
+		}
+	}
+
+	// Resolve the path.
+	resolvedPath, _, err := validatePath(pkgPath, workingDir)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	pkgPath = resolvedPath
+
+	// Get or create project dir if needed.
+	if workingDir == "" {
+		projDir, err := gs.getOrCreateProject(ctx, pkgPath)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to create temporary project: %v", err)), nil
+		}
+		workingDir = projDir
+	}
+
+	packages, err := gs.listPackages(ctx, workingDir, pkgPath)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	if len(packages) == 0 {
+		return mcp.NewToolResultText(fmt.Sprintf("No sub-packages found under %s", pkgPath)), nil
+	}
+
+	return mcp.NewToolResultText(strings.Join(packages, "\n")), nil
+}
+
+// listPackages runs `go list <path>/...` and returns each package with its doc synopsis.
+func (gs *godocServer) listPackages(ctx context.Context, workingDir, importPath string) ([]string, error) {
+	listCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
+	defer cancel()
+
+	// Use go list -f to get import path and doc synopsis in one call.
+	cmd := exec.CommandContext(listCtx, "go", "list", "-f", "{{.ImportPath}}\t{{.Doc}}", importPath+"/...")
+	cmd.Dir = workingDir
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("go list failed: %w\noutput: %s", err, string(out))
+	}
+
+	var result []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 2)
+		pkg := parts[0]
+		doc := ""
+		if len(parts) == 2 && parts[1] != "" {
+			doc = " - " + parts[1]
+		}
+		result = append(result, pkg+doc)
+	}
+
+	return result, nil
 }
 
 // paginate splits content into pages and returns the requested page with metadata.

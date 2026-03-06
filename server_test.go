@@ -524,6 +524,93 @@ func TestHandleGetDocMissingPath(t *testing.T) {
 	}
 }
 
+func TestListPackagesStdlib(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("go not found in PATH")
+	}
+
+	gs := newGodocServer()
+	defer gs.cleanup()
+
+	ctx := context.Background()
+
+	projDir, err := gs.getOrCreateProject(ctx, "net")
+	if err != nil {
+		t.Fatalf("getOrCreateProject: %v", err)
+	}
+
+	packages, err := gs.listPackages(ctx, projDir, "net")
+	if err != nil {
+		t.Fatalf("listPackages: %v", err)
+	}
+
+	if len(packages) < 5 {
+		t.Fatalf("expected at least 5 sub-packages under net, got %d", len(packages))
+	}
+
+	// Should contain net/http somewhere.
+	found := false
+	for _, p := range packages {
+		if strings.HasPrefix(p, "net/http") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected net/http in sub-package list")
+	}
+}
+
+func TestHandleListPackages(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("go not found in PATH")
+	}
+
+	gs := newGodocServer()
+	defer gs.cleanup()
+
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "list_packages"
+	req.Params.Arguments = map[string]any{
+		"path": "net",
+	}
+
+	result, err := gs.handleListPackages(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleListPackages returned protocol error: %v", err)
+	}
+
+	if result.IsError {
+		t.Fatalf("handleListPackages returned tool error: %+v", result.Content)
+	}
+
+	for _, c := range result.Content {
+		if tc, ok := c.(mcp.TextContent); ok {
+			if strings.Contains(tc.Text, "net/http") {
+				return // success
+			}
+		}
+	}
+	t.Error("expected 'net/http' in list_packages result")
+}
+
+func TestHandleListPackagesMissingPath(t *testing.T) {
+	gs := newGodocServer()
+
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "list_packages"
+	req.Params.Arguments = map[string]any{}
+
+	result, err := gs.handleListPackages(context.Background(), req)
+	if err != nil {
+		t.Fatalf("returned protocol error: %v", err)
+	}
+
+	if !result.IsError {
+		t.Error("expected tool error for missing path")
+	}
+}
+
 // Test helpers
 
 func makeLines(n int) []string {
