@@ -13,7 +13,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-const version = "1.0.1"
+const version = "1.1.0"
 
 func main() {
 	transport := flag.String("transport", "stdio", "Transport type: stdio, sse, or http")
