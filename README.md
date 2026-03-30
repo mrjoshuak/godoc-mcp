@@ -4,6 +4,10 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/mrjoshuak/godoc-mcp.svg)](https://pkg.go.dev/github.com/mrjoshuak/godoc-mcp)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/mrjoshuak-godoc-mcp).
+
 ## Overview
 
 `godoc-mcp` is a Model Context Protocol (MCP) server that provides efficient access to Go documentation. It helps LLMs understand Go projects by providing direct access to package documentation without needing to read entire source files. `godoc-mcp` can vastly improve the performance of using LLMs to develop in Go by substantially reducing the number of tokens needed to understand and make use of Go packages.
